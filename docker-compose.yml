@@ -1,16 +1,16 @@
 
-services:
-  pgvector:
-    image: pgvector/pgvector:pg16
-    container_name: adhd_pgvector
-    environment:
-      POSTGRES_USER: adhd_user
-      POSTGRES_PASSWORD: adhd_pass
-      POSTGRES_DB: adhd_db
+services: # Defines what container to run!
+  pgvector: # Name of this service(used in docker commands).
+    image: pgvector/pgvector:pg16 # Pre-built image: PostgreSQL 16 + pgvector extension.
+    container_name: adhd_pgvector # friendly container name for the docker ps and docker logs.
+    environment: # environment varialbes passed into the container.
+      POSTGRES_USER: adhd_user     # Database username.
+      POSTGRES_PASSWORD: adhd_pass # Database password.
+      POSTGRES_DB: adhd_db         # Database name to create on startup.
     ports:
-      - "5433:5432"
+      - "5433:5432" # host_port:container_port -> our machine's 5432 maps to container's 5432
     volumes:
-      - pgvector_data:/var/lib/postgresql/data
+      - pgvector_data:/var/lib/postgresql/data # Persist data outside the container.
 
 volumes:
-  pgvector_data:
+  pgvector_data: # Declares a named volume - docker manages its location.
