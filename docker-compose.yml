@@ -1,0 +1,16 @@
+
+services:
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: adhd_pgvector
+    environment:
+      POSTGRES_USER: adhd_user
+      POSTGRES_PASSWORD: adhd_pass
+      POSTGRES_DB: adhd_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+
+volumes:
+  pgvector_data:
