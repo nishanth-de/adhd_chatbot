@@ -61,5 +61,5 @@ class FeedbackRequest(BaseModel):
     comment: Optional[str] = Field(default=None)
 
 class FeedbackResponse(BaseModel):
-    status: str = Field(default="received")
+    status: str = Field(default="Received")
     message: str = Field(default="Thank you for your feedback")

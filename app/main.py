@@ -3,7 +3,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import chat
+from app.routes import feedback
 from app.models.chat import HealthResponse
+from app.database import test_connection
 
 
 
@@ -55,6 +57,12 @@ app.include_router(
     tags=["Chat"]
 )
 
+app.include_router(
+    feedback.router,
+    prefix="/api/v1",
+    tags=["Feedback"]
+)
+
 
 # Global exception handler - catches any unhandled error
 @app.exception_handler(Exception)
@@ -82,8 +90,26 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check():
+    """
+    Verify API is running and DB is reachable
+    Returns 200 if healthy, 503 if database is unavailable.
+    """
+    db_status = test_connection()
+
+    if not db_status:
+        # 503 = Service Unavailable
+        # Using JSONResponse directly because we need to set status_code
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "version": "0.1.0",
+                "database": "unreachable"
+            }
+        )
+
     return HealthResponse(
-        status = "healthy", 
-        version = "0.1.0",
-        database="not_checked_yet"
+        status="healthy",
+        version="0.1.0",
+        database="connected"
     )

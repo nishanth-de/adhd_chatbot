@@ -8,7 +8,7 @@ services: # Defines what container to run!
       POSTGRES_PASSWORD: adhd_pass # Database password.
       POSTGRES_DB: adhd_db         # Database name to create on startup.
     ports:
-      - "5433:5432" # host_port:container_port -> our machine's 5432 maps to container's 5432
+      - "5433:5432" # host_port:container_port -> our machine's 5433 maps to container's 5432
     volumes:
       - pgvector_data:/var/lib/postgresql/data # Persist data outside the container.
 
