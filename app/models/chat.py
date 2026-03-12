@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, validator
 from typing import Optional
 import uuid
 
@@ -14,7 +14,7 @@ class ChatRequest(BaseModel):
         description="Session ID for conversation continuity. Auto-generated if not provided."
     ) 
 
-    @field_validator(question)
+    @validator("question")
     def question_must_not_be_blank(cls, v):
         """
         Validates that the 'question' field is not empty or contains only whitespace.
@@ -85,3 +85,13 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     database: str
+
+
+class FeedbackRequest(BaseModel):
+    session_id: str
+    helpful: bool
+    comment: Optional[str]
+
+class FeedbackResponse(BaseModel):
+    status: str = Field(default="received")
+    message: str = Field(default="Thank you for your feedback")
