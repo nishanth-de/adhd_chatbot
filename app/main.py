@@ -56,7 +56,6 @@ app.include_router(
 )
 
 
-
 # Global exception handler - catches any unhandled error
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exec: Exception):
@@ -81,7 +80,7 @@ async def root():
 
 
 
-@app.get("/health", response_model=HealthResponse, tags=["system"])
+@app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check():
     return HealthResponse(
         status = "healthy", 
