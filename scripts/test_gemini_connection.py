@@ -22,7 +22,7 @@ print("Testing Gemini API connection...")
 try:
     # Make a minimal embedding call to verify the key works
     response = client.models.embed_content(
-        model="models/gemini-embedding-001",
+        model="gemini-embedding-001",
         contents="test connection",
         config=types.EmbedContentConfig(
             task_type="RETRIEVAL_DOCUMENT",
@@ -37,4 +37,5 @@ except Exception as e:
     print(f"Connection failed: {e}")
     print("Check your GEMINI_API_KEY in .env")
     sys.exit(1)
+
 

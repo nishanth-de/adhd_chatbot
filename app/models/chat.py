@@ -53,6 +53,7 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     database: str
+    ai_service: str = Field(default="unknown")
 
 
 class FeedbackRequest(BaseModel):

@@ -6,6 +6,7 @@ from app.routes import chat
 from app.routes import feedback
 from app.models.chat import HealthResponse
 from app.database import test_connection
+from app.services.embeddings import test_embedding_connection
 
 
 
@@ -91,12 +92,13 @@ async def root():
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health_check():
     """
-    Verify API is running and DB is reachable
-    Returns 200 if healthy, 503 if database is unavailable.
+    Verify API is running and DB, AI model is reachable
+    Returns 200 if healthy, 503 if database or AI model is unavailable.
     """
     db_status = test_connection()
+    ai_status = test_embedding_connection()
 
-    if not db_status:
+    if not db_status or not ai_status:
         # 503 = Service Unavailable
         # Using JSONResponse directly because we need to set status_code
         return JSONResponse(
@@ -104,12 +106,17 @@ async def health_check():
             content={
                 "status": "unhealthy",
                 "version": "0.1.0",
-                "database": "unreachable"
+                "database": "connected" if db_status else "unreachable",
+                "ai_service": "connected" if ai_status else "unreachable"
             }
         )
 
-    return HealthResponse(
-        status="healthy",
-        version="0.1.0",
-        database="connected"
+    return JSONResponse(
+        status_code= 200,
+        content={
+            "status":"healthy",
+            "version": "0.1.0",
+            "database":"connected",
+            "ai_service":"connected"
+        }
     )

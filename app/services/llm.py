@@ -16,6 +16,26 @@ client = genai.Client(api_key=api_key)
 
 CHAT_MODEL = "gemini-2.5-flash"
 
+def test_llm_collection() -> bool:
+    """
+    Quick connectivity test for the Gemini API.
+    only used by health checks.
+    Returns True if API is reachable, else False
+    """
+    try:
+        response = client.models.embed_content(
+            model="gemini-embedding-001",
+            contents="health check ping",
+            config=types.EmbedContentConfig(
+                task_type= "RETRIEVAL_QUERY",
+                output_dimensionality=768
+            )
+        )
+        return len(response.embeddings[0].values) == 768
+    except Exception as e:
+        logger.error(f"LLM connection test failed: {e}")
+        return False
+
 # Prompt engineering:
 # System prompt — this is the personality and rules of our chatbot
 SYSTEM_PROMPT = """
@@ -148,4 +168,4 @@ if __name__ == "__main__":
     print(f"\n=== EMPTY CONTEXT TEST ===")
     print(f"A: {empty_answer}")
 
-    
+

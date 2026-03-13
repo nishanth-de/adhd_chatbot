@@ -23,6 +23,24 @@ client = genai.Client(api_key=api_key)
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 768 # Must match our database vector(768) column
 
+def test_embedding_connection() -> bool:
+    """Tests that the embedding model is reachable."""
+    try:
+        response = client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents="connection test",
+            config=types.EmbedContentConfig(
+                task_type="RETRIEVAL_QUERY",
+                output_dimensionality=EMBEDDING_DIMENSIONS
+            )
+        )
+        return len(response.embeddings[0].values) == EMBEDDING_DIMENSIONS
+    
+    except Exception as e:
+        logger.error(f"Embedding connection test failed: {e}")
+        return False
+
+
 def get_embedding(text: str, retries: int = 3) -> list[float]:
     """
     Convert a document chunks to vector embeddings. We use this function, when 
