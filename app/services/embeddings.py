@@ -1,3 +1,5 @@
+# embeddings.py module responsible for all embedding operations.
+
 import os
 import time
 import logging
