@@ -40,6 +40,7 @@ def test_connection() -> bool:
             connection.execute(text("SELECT 1"))
         logger.info("Database connection test: SUCCESS")
         return True
+    
     except OperationalError as e:
         logger.error(f"Database connection test: Failed - {e}")
         return False

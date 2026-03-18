@@ -13,15 +13,15 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def enable_vector_extension(connection):
+def enable_vector_extension(conn):
     """
     Enables the pgvector extension in PostgreSQL.
     """
-    connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
     logger.info("pgvector extension enabled")
 
 
-def create_documents_table(connection):
+def create_documents_table(conn):
     """
     Creates the main documents table for storing text chunks and their embeddings.
     Columns:
@@ -32,21 +32,35 @@ def create_documents_table(connection):
     - embedding: the vector representation (768 dimensions for Gemini text-embedding-004)
     - created_at: when this chunk was ingested
     """
-    connection.execute(
+    # .execute() sends SQL to the database,it is a method of the SQLAlchemy connection object..
+    conn.execute(text("DROP TABLE IF EXISTS documents;"))
+
+    conn.execute(
         text(
             """
             CREATE TABLE IF NOT EXISTS documents (
                 id          SERIAL PRIMARY KEY,
+
+                -- CORE CONTENT
                 content     TEXT NOT NULL,
-                source      TEXT NOT NULL,
+                word_count  INTEGER NOT NULL DEFAULT 0,
+
+                -- SOURCE TRACKING(powers grounded citations)
+                source_file TEXT NOT NULL,
+                source_type TEXT NOT NULL DEFAULT 'unknown',
+                page_number INTEGER NOT NULL,
                 chunk_index INTEGER NOT NULL DEFAULT 0,
-                embedding   vector(768),
+
+                -- VECTOR EMBEDDING
+                embedding   vector(768) NOT NULL,
+
+                -- TIMESTAMPS
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
     )
-    logger.info("documents table created (or already exists)")
+    logger.info("documents table created with full metadata schema")
 
 def create_vector_index(conn):
     """
@@ -89,7 +103,9 @@ def verify_setup(conn):
     result = conn.execute(
         text(
             """
-            SELECT table_name FROM information_schema.tables
+            SELECT 
+                table_name 
+            FROM information_schema.tables
             WHERE table_schema = 'public' AND table_name = 'documents';
             """
         )
@@ -99,7 +115,9 @@ def verify_setup(conn):
 
     # Check row count
     result = conn.execute(text("SELECT COUNT(*) FROM documents;"))
-    count = result.fetchone()[0]
+    count = result.fetchone()[0] 
+        # .fetchone() -> gets first row. 
+        # [0] -> gets first column.
     logger.info(f"documents table row count: {count}")
 
 
