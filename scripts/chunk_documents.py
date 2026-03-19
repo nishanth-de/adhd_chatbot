@@ -47,7 +47,7 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     
         # Fix hyphenated line breaks
         # Eg: execu-\ntive -> executive
-        text = re.sub(r"-\n", "", text)
+        text = re.sub(r'-\n', "", text)
 
         # Replacing single new line with space (paragraph flow)
         # But preserve double new lines (paragraph break)
@@ -71,24 +71,183 @@ def extract_text_from_pdf(pdf_path: str) -> str:
 
     return full_text.strip()
 
-if __name__ == "__main__":
-    # Text extraction of the first pdf in our data/raw folder.
-    raw_dir = r"data/raw/pdf~"
-    pdf_files = [files for files in os.listdir(raw_dir) if files.endswith('.pdf')]
+
+
+# Building sentence aware chunker
+# Writing the chunking function that splits text at sentence boundaries.
+# But Why? Chunks that end mid-sentence will produce worst embeddings
+# Mental Model: Better chunks = Better retrieval = Better Answer
+def chunk_text_by_sentece(
+        text: str,
+        source: str,
+        target_chunk_words: int = 300,
+        overlap_sentences: int = 2
+    ) -> list[dict]:
+    """
+    Splits texts into chunks at sentence boundaries
+    
+    Algorithm:
+        -> Using nltk to detect sentence boundaries
+        -> Accumulate sentences until target words count is reached
+        -> Start new chunk, carrying last "overlap_sentence" into it
+        -> Each chunk is a complete set of sentence, no mid-sentence
+    
+    Args:
+        -> text: Cleaned text to chunk.
+        -> source: Filename of the source pdf(for citations).
+        -> target_chunk_words: approximate target words per chunk.
+        -> overlap_sentences: sentence to carry over between chunks
+
+    Returns:
+        list of dict with content, source, chunk_index, word_count
+    """
+    sentences = [s.strip() for s in sent_tokenize(text) if s.strip()]
+
+    if not sentences:
+        logger.warning("No sentence detected in {source}")
+        return[]
+
+    chunks = []
+    current_sentences = []
+    current_word_count = 0
+    chunk_index = 0
+
+    for sentence in sentences:
+        sentence_words = len(sentence.split())
+        current_sentences.append(sentence)
+        current_word_count += sentence_words
+
+        # When we hit target size we save the chunks
+        if current_word_count >= target_chunk_words:
+            chunk_text = " ".join(current_sentences)
+
+            chunks.append({
+                "content": chunk_text,
+                "source": source,
+                "chunk_index": chunk_index,
+                "word_count": current_word_count
+            })
+
+            chunk_index += 1
+
+            # Keeping last sentences for overlap (context continuity)
+            current_sentences = current_sentences[-overlap_sentences:]
+            current_word_count = sum(
+                len(s.split()) for s in current_sentences 
+            )
+
+    # Adding the last chunk which may be smaller than target
+    if current_sentences:
+        chunk_text = " ".join(current_sentences)
+        
+        # Only adding words more than 50 for meaningful context!
+        if len(chunk_text.split()) > 50:
+            chunks.append({
+                "content": chunk_text,
+                "source": source,
+                "chunk_index": chunk_index,
+                "word_count": len(chunk_text.split())
+            })
+    
+    logger.info(
+        f"Chunked '{source}': {len(sentences)} sentences ->"
+        f"{len(chunks)} Chunks"
+        f"(avg {sum(c['word_count'] for c in chunks) // max(len(chunks), 1)} words/chunks)"
+    )
+    return chunks
+
+
+
+def process_all_pdf(raw_dir: str = r"data/raw/pdf") -> list[dict]:
+    """
+    process all pdf's in raw/pdf directories and returns chunks
+    """
+
+    pdf_files = [file for file in os.listdir(raw_dir) if file.endswith('.pdf')]
 
     if not pdf_files:
-        print("No PDFs found in data/raw/. Add your PDF files first.")
+        logger.warning(f"No PDF files found in {raw_dir}")
+        return []
+    
+    all_chunks = []
+
+    for filename in pdf_files:
+        pdf_path = os.path.join(raw_dir, filename)
+        logger.info(f"Processing: {filename}")
+
+        try:
+            text = extract_text_from_pdf(pdf_path)
+
+            if len(text.split()) < 100:
+                logger.error(
+                    f"skipping {filename} too little text extracted"
+                    f"({len(text.split())} words), Maybe scanned pdf"
+                )
+                continue
+
+            chunks = chunk_text_by_sentece(
+                text = text,
+                source = filename,
+                target_chunk_words = 300,
+                overlap_sentences=2
+            )
+            all_chunks.extend(chunks)
+
+        except Exception as e:
+            logger.error(f"Failed to process {filename} : {e}")
+            continue
+
+    logger.info(f"total chunks from all the PDF's: {len(all_chunks)}")
+    return all_chunks
+
+
+if __name__ == "__main__":
+    # Inspecting our chunks before embedding!
+    import json
+
+    print("\n=== Document chunking pipeiline ===")
+
+    all_chunks = process_all_pdf(r"data/raw/pdf")
+    
+    if not all_chunks:
+        print("No chunks produced, check PDF Files")
         sys.exit(1)
 
-    test_pdf = os.path.join(raw_dir, pdf_files[0])
-    print(f"Testing extraction on: {test_pdf}\n")
+    # save full output path for inspection
+    output_path = r"data/processed/all_chunks.json"
+    os.makedirs(r"data/processed", exist_ok= True)
 
-    text = extract_text_from_pdf(test_pdf)
-    print(f"Total characters extracted: {len(text)}")
-    print(f"Estimated words: {len(text.split())}")
-    print(f"\nFirst 500 characters:")
-    print("-" * 40)
-    print(text[:500])
-    print("-" * 40)
-    print(f"\nLast 200 characters:")
-    print(text[-200:])
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(all_chunks, f, indent=2, ensure_ascii= False)
+
+    print("\n === Chunking summary ===")
+    print(f"Total chunks: {len(all_chunks)}")
+
+    # stats per source
+    from collections import Counter
+    source_count = Counter([c['source'] for c in all_chunks])
+    print("\n Chunks per source:")
+    for source, counts in source_count.most_common():
+        print(f" {source}: {counts} chunks")
+    
+    # word count distribution
+    word_counts = [c['word_count'] for c in all_chunks]
+    print("\nWord count stats")
+    print(f"Min: {min(word_counts)}")
+    print(f"Max: {max(word_counts)}")
+    print(f"Avg: {sum(word_counts)// len(word_counts)}")
+
+    # Preview of first 5 chunks
+    preview_path = r"data/processed/chunks_preview.json"
+    with open(preview_path, "w", encoding="utf-8") as f:
+        json.dump(all_chunks[:5], f, indent=2, ensure_ascii=False)
+
+    print(f"\nFull ouput saved to: {output_path}")
+    print(f"Preview saved to: {preview_path}")
+
+    print(f"=== SAMPLE CHUNK ===")
+    sample = all_chunks[len(all_chunks) // 2] # middle chunk
+    print(f"Source: {sample['source']}")
+    print(f"Index: {sample['chunk_index']}")
+    print(f"Words: {sample['word_count']}")
+    print(f"Content:\n{sample['content'][:400]}...")
