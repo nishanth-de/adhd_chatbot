@@ -30,11 +30,10 @@ def create_documents_table(conn):
     - source: which file this chunk came from (for citations)
     - chunk_index: position of this chunk within its source document
     - embedding: the vector representation (768 dimensions for Gemini text-embedding-004)
+    - content_tsv: preprocessed text for BM25 keyword search
     - created_at: when this chunk was ingested
     """
     # .execute() sends SQL to the database,it is a method of the SQLAlchemy connection object..
-    conn.execute(text("DROP TABLE IF EXISTS documents;"))
-
     conn.execute(
         text(
             """
@@ -52,7 +51,10 @@ def create_documents_table(conn):
                 chunk_index INTEGER NOT NULL DEFAULT 0,
 
                 -- VECTOR EMBEDDING
-                embedding   vector(768) NOT NULL,
+                embedding   vector(768),
+
+                -- BM25 KEYWORD SEARCH
+                content_tsv  tsvector,
 
                 -- TIMESTAMPS
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -62,15 +64,21 @@ def create_documents_table(conn):
     )
     logger.info("documents table created with full metadata schema")
 
-def create_vector_index(conn):
+
+
+def create_indexes(conn):
     """
     Creates an HNSW index on the embedding column for fast similarity search.
 
     HNSW (Hierarchical Navigable Small World) 
-    It is an approximate nearest-neighbour algorithm. 
-    It trades a small amount of accuracy for large speed gains.
+    - It is an approximate nearest-neighbour algorithm. 
+    - It trades a small amount of accuracy for large speed gains.
+    - vector_cosine_ops tells pgvector to optimise for cosine distance (<=> operator).
 
-    vector_cosine_ops tells pgvector to optimise for cosine distance (<=> operator).
+    GIN index (content_tsv column):
+    - Algorithm: Generalised Inverted Index
+    - Purpose: fast keyword lookup for full-text / BM25 search
+    - GIN is the standard index type for tsvector columns
     """
     conn.execute(
         text(
@@ -82,6 +90,15 @@ def create_vector_index(conn):
         )
     )
     logger.info("HNSW vector index created (or already exists)")
+
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS documents_tsv_idx
+        ON documents
+        USING gin (content_tsv);
+    """))
+    logger.info("GIN full-text search index created")
+
+
 
 def verify_setup(conn):
     """
@@ -96,8 +113,8 @@ def verify_setup(conn):
         """
         )
     )
-    ext = result.fetchone()
-    logger.info(f"pgvector extension: {'FOUND' if ext else 'NOT FOUND'}")
+    extension_name = result.fetchone()
+    logger.info(f"pgvector extension: {'FOUND' if extension_name else 'NOT FOUND'}")
 
     # Check table
     result = conn.execute(
@@ -112,6 +129,15 @@ def verify_setup(conn):
     )
     table = result.fetchone()
     logger.info(f"documents table: {'FOUND' if table else 'NOT FOUND'}")
+
+    # Check both indexes exist
+    result = conn.execute(text("""
+        SELECT indexname FROM pg_indexes
+        WHERE tablename = 'documents'
+        ORDER BY indexname;
+    """))
+    indexes = [row[0] for row in result.fetchall()]
+    logger.info(f"Indexes found: {indexes}")
 
     # Check row count
     result = conn.execute(text("SELECT COUNT(*) FROM documents;"))
@@ -137,7 +163,7 @@ def init_db():
     with get_connection() as conn:
         enable_vector_extension(conn)
         create_documents_table(conn)
-        create_vector_index(conn)
+        create_indexes(conn)
         conn.commit()  # commit all changes together
         verify_setup(conn)
 

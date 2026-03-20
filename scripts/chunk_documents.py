@@ -7,8 +7,14 @@ import logging
 import re
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+"""
+# used to split a given text or paragraph into a list of individual sentences. 
+# It leverages a pre-trained model (PunktSentenceTokenizer).
+# to intelligently identify sentence boundaries based on punctuation, capitalization, 
+# and other linguistic patterns, handling complex cases like abbreviations.
+"""
 import nltk
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize import sent_tokenize 
 import fitz # PyMuPDF
 
 logging.basicConfig(
@@ -20,8 +26,42 @@ logger = logging.getLogger(__name__)
 
 # Downloading required data if not already present
 # Safe to call repeatedly - only downloads if missing
+
+# Punkt handles tokenization (splitting text)
 nltk.download("punkt", quiet=True)
 nltk.download("punkt_tab", quiet=True)
+
+
+
+# Footer patterns to strip
+BOILERPLATE_PATTERNS = [
+    # NICE guidelines footer — matches any guideline code and year
+    # Example: "(NG87) © NICE 2025. All rights reserved. Subject to Notice of rights (URL)"
+    r'\([A-Z]+\d+\)\s*©\s*NICE\s*\d{4}\.?\s*All rights reserved\..*?(?=\n|$)',
+
+    # Generic copyright lines
+    r'©\s*\d{4}.*?All rights reserved\.?',
+
+    # URLs on their own line (often footers)
+    r'https?://\S+',
+
+    # "Page X of Y" patterns
+    r'Page\s+\d+\s+of\s+\d+',
+]
+
+def remove_boilerplate(text: str) -> str:
+    """
+    Removes footer/header patterns from extracted text.
+    These are legal notices, page numbers, URLs, and repeated headers
+    which is noise to our embeddings and adds no information.
+    """
+    for pattern in BOILERPLATE_PATTERNS:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+
+    # Clean up any blank lines created by removals
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
@@ -69,6 +109,10 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     # Final cleanup — collapse more than 2 consecutive newlines
     full_text = re.sub(r'\n{3,}', '\n\n', full_text)
 
+    # Remove boilerplate AFTER joining all pages
+    # Why after? Because some footers span a line break across the join point
+    full_text = remove_boilerplate(full_text)
+
     return full_text.strip()
 
 
@@ -101,6 +145,8 @@ def chunk_text_by_sentece(
     Returns:
         list of dict with content, source, chunk_index, word_count
     """
+    # sent_tokenize(text) Splits a document into a list of sentences
+    # using the punkt_tab model to identify where sentences
     sentences = [s.strip() for s in sent_tokenize(text) if s.strip()]
 
     if not sentences:
