@@ -169,8 +169,10 @@ def chunk_text_by_sentece(
 
             chunks.append({
                 "content": chunk_text,
-                "source": source,
-                "chunk_index": chunk_index,
+                "source_file": source,        # matches DB column name
+                "source_type": "pdf",         # matches DB column name
+                "page_number": 0,             # we'll improve this later
+                "chunk_index": chunk_index,   # matches DB column name
                 "word_count": current_word_count
             })
 
@@ -190,9 +192,11 @@ def chunk_text_by_sentece(
         if len(chunk_text.split()) > 50:
             chunks.append({
                 "content": chunk_text,
-                "source": source,
-                "chunk_index": chunk_index,
-                "word_count": len(chunk_text.split())
+                "source_file": source,        # matches DB column name
+                "source_type": "pdf",         # matches DB column name
+                "page_number": 0,             # you'll improve this later
+                "chunk_index": chunk_index,   # matches DB column name
+                "word_count": current_word_count
             })
     
     logger.info(
@@ -271,7 +275,7 @@ if __name__ == "__main__":
 
     # stats per source
     from collections import Counter
-    source_count = Counter([c['source'] for c in all_chunks])
+    source_count = Counter([c['source_file'] for c in all_chunks])
     print("\n Chunks per source:")
     for source, counts in source_count.most_common():
         print(f" {source}: {counts} chunks")
@@ -293,7 +297,7 @@ if __name__ == "__main__":
 
     print(f"=== SAMPLE CHUNK ===")
     sample = all_chunks[len(all_chunks) // 2] # middle chunk
-    print(f"Source: {sample['source']}")
+    print(f"Source: {sample['source_file']}")
     print(f"Index: {sample['chunk_index']}")
     print(f"Words: {sample['word_count']}")
     print(f"Content:\n{sample['content'][:400]}...")

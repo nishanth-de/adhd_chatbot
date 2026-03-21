@@ -23,7 +23,7 @@ engine = create_engine(
     pool_size = 5,
     max_overflow = 10,
     pool_pre_ping = True,
-    echo = False 
+    echo = False # Need to learn!!
 )
 
 def get_connection():
