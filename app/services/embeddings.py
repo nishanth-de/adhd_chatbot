@@ -107,10 +107,11 @@ def get_query_embedding(text: str) -> list[float]:
             )     
         )
         embeddings = response.embeddings[0].values
-        logger.info(f"Generated query embedding | dimensions={len(embedding)}")
+        logger.info(f"Generated query embedding | dimensions={len(embeddings)}")
         return list(embeddings)
+
     except Exception as e:
-        logger.error("Query embedding got failed - {e}")
+        logger.error(f"Query embedding got failed - {e}")
         raise
 
 if __name__ == "__main__":
@@ -142,7 +143,7 @@ if __name__ == "__main__":
     embedding_b = get_embedding(sentence_b)
     embedding_c = get_embedding(sentence_c)
 
-    # Calculate cosine similarity manually (dot product of normalised vectors)
+    # Calculating cosine similarity manually (dot product of normalised vectors)
     def cosine_similarity(v1, v2):
         dot = sum(a * b for a, b in zip(v1, v2))
         mag1 = sum(a ** 2 for a in v1) ** 0.5
