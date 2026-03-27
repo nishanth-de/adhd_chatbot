@@ -84,7 +84,7 @@ def generate_answer(question:str, context_chunks: list[dict]) -> str:
     
     # Building the context blocks for retrieved chunks.
     context_text = "\n\n---\n\n".join([
-        f"[Source: {chunk['source']}]\n{chunk['content']}"
+        f"[Source: {chunk['source_file']}]\n{chunk['content']}"
         for chunk in context_chunks
     ])
 
@@ -109,7 +109,7 @@ def generate_answer(question:str, context_chunks: list[dict]) -> str:
             contents=user_prompt,
             config= types.GenerateContentConfig(
                 system_instruction = SYSTEM_PROMPT,
-                temperature = 0.9,
+                temperature = 0.1,
                 max_output_tokens = 1024
             )
         )
