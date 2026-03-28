@@ -3,7 +3,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import chat
-from app.routes import feedback
 from app.models.chat import HealthResponse
 from app.database import test_connection
 from app.services.embeddings import test_embedding_connection
@@ -59,9 +58,9 @@ app.include_router(
 )
 
 app.include_router(
-    feedback.router,
+    chat.router,
     prefix="/api/v1",
-    tags=["Feedback"]
+    tags=["Chat"]
 )
 
 

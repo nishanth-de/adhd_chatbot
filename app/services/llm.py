@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from app.services.citations import format_context_for_llm
 
 load_dotenv()
 
@@ -65,7 +66,7 @@ def generate_answer(question:str, context_chunks: list[dict]) -> str:
     """
     Generates a grounded answer using gemini, based only on the retrieval context.
 
-    Args:
+    Argumentss:
         question: The user's question.
         context_chunks: A list of dictionary with 'content' and 'source' keys
                         retrieved from PgVector.
@@ -82,11 +83,8 @@ def generate_answer(question:str, context_chunks: list[dict]) -> str:
             """
         )
     
-    # Building the context blocks for retrieved chunks.
-    context_text = "\n\n---\n\n".join([
-        f"[Source: {chunk['source_file']}]\n{chunk['content']}"
-        for chunk in context_chunks
-    ])
+    # Using citation formatter for consistent context structure
+    context_text = format_context_for_llm(context_chunks)
 
     # full prompt: context + question
     # The model will only answer based on the provided context

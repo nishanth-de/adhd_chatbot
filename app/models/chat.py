@@ -21,9 +21,18 @@ class ChatRequest(BaseModel):
             raise ValueError("Question cannot be blank or white space only")
         return v.strip()
 
-class SourceReference(BaseModel):
-    source: str = Field(description="Document filename the answer was drawn from")
-    similarity: float = Field(description="Semantic similarity score(0-1) higher is better")
+
+class SourceCitation(BaseModel):
+    """
+    A grounded citation linking an answer back to its exact source chunk.
+    Users can use this to verify the answer against the original document.
+    """
+    source_file: str = Field(description="PDF filename the chunk came from")
+    chunk_index: int = Field(description="Position of chunk within source document")
+    page_number: int = Field(description="Page number in original PDF")
+    excerpt: str = Field(description="First 200 characters of the source chunk")
+    relevance_score: float = Field(description="Cohere relevance score (0-1)")
+    confidence: str = Field(description="high, medium, or low")
 
 class ChatResponse(BaseModel):
     """
@@ -43,9 +52,14 @@ class ChatResponse(BaseModel):
         status (str): HTTP status indicator for the response (default: "success").
             Indicates whether the request was processed successfully.
     """
-    answer: str = Field(description="The AI Generated answer")
-    session_id: str = Field(description="The session_id for this conversation")
-    sources: list[SourceReference] = Field(description="document used to generate the answer")
+    answer: str = Field(description="AI-generated answer grounded in sources")
+    session_id: str = Field(description="Session ID for this conversation")
+    confidence: str = Field(
+        description="Overall confidence: high, medium, low, or out_of_scope"
+    )
+    sources: list[SourceCitation] = Field(
+        description="Source chunks used to generate this answer"
+    )
     status: str = Field(default="success")
 
 

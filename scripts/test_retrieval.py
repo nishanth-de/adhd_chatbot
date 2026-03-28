@@ -2,8 +2,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.retrieval import hybrid_search
-from services.llm import generate_answer
+from app.services.retrieval import hybrid_search
+from app.services.llm import generate_answer
 
 def test_full_pipeline(question: str):
     print(f"\n{'='*60}")
