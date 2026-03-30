@@ -56,35 +56,43 @@ def remove_boilerplate(text: str) -> str:
     which is noise to our embeddings and adds no information.
     """
     for pattern in BOILERPLATE_PATTERNS:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE) # re.IGNORANCE perform case-insensitive matching
 
     # Clean up any blank lines created by removals
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 
-def extract_text_from_pdf(pdf_path: str) -> str:
+def extract_pages_from_pdf(pdf_path: str) -> list[dict]:
     """
-    Extracts and cleans text from a pdf file.
+    Extracts text from each page separately, preserving page numbers.
+    Returns a list of page dicts instead of one joined string.
+
+    This is the correct approach for page-accurate citations.
+    Previously I've joined all pages then chunked — that loses
+    page number information entirely.
 
     Cleaning steps:
         -> Extracts text page by page
-        -> Remove exessice white space
-        -> Fix hyphenated line breaks (re-join split words)
-        -> Remove page numbers and common headers/footers patterns
+        -> Remove exessive white space
+        -> Remove common headers/footers patterns
     
-    Args:
-        pdf_path: Full path of the pdf file
+    Arguments:
+        pdf_path: Full path of the pdf file.
     
     Returns: 
-        Cleaned text string
+        list of dicts with text, page_number, source.
     """
     doc = fitz.open(pdf_path)
-    pages_text = []
+    source = os.path.basename(pdf_path)
+    pages = []
 
     for page_num, page in enumerate(doc):
         text = page.get_text()
-    
+
+        if not text.strip():
+            continue # Skips blank pages
+
         # Fix hyphenated line breaks
         # Eg: execu-\ntive -> executive
         text = re.sub(r'-\n', "", text)
@@ -99,21 +107,24 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         # Removing standalone pagenumbers (eg: (e.g., "- 3 -" or just "3" on a line))
         text = re.sub(r"\n\s*-?\s*\d+\s*-?\s*\n", "\n", text)
 
-        pages_text.append(text.strip())
+        text = remove_boilerplate(text)
+
+        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+
+        if len(text.split()) < 20:
+            continue # skip pages with almost no content after cleaning
+
+        pages.append(
+            {
+                "text": text,
+                "page_number": page_num + 1, # 1-indexed, matches PDF page numbers
+                "source": source
+            }
+        )
 
     doc.close()
-
-    # Joining all pages
-    full_text = "\n\n".join(pages_text)
-
-    # Final cleanup — collapse more than 2 consecutive newlines
-    full_text = re.sub(r'\n{3,}', '\n\n', full_text)
-
-    # Remove boilerplate AFTER joining all pages
-    # Why after? Because some footers span a line break across the join point
-    full_text = remove_boilerplate(full_text)
-
-    return full_text.strip()
+    logger.info(f"Extracted {len(pages)} from {source}")
+    return pages
 
 
 
@@ -136,7 +147,7 @@ def chunk_text_by_sentece(
         -> Start new chunk, carrying last "overlap_sentence" into it
         -> Each chunk is a complete set of sentence, no mid-sentence
     
-    Args:
+    Argumnets:
         -> text: Cleaned text to chunk.
         -> source: Filename of the source pdf(for citations).
         -> target_chunk_words: approximate target words per chunk.
@@ -171,7 +182,7 @@ def chunk_text_by_sentece(
                 "content": chunk_text,
                 "source_file": source,        # matches DB column name
                 "source_type": "pdf",         # matches DB column name
-                "page_number": 0,             # we'll improve this later
+                "page_number": None,             
                 "chunk_index": chunk_index,   # matches DB column name
                 "word_count": current_word_count
             })
@@ -192,10 +203,10 @@ def chunk_text_by_sentece(
         if len(chunk_text.split()) > 50:
             chunks.append({
                 "content": chunk_text,
-                "source_file": source,        # matches DB column name
-                "source_type": "pdf",         # matches DB column name
-                "page_number": 0,             # you'll improve this later
-                "chunk_index": chunk_index,   # matches DB column name
+                "source_file": source,       
+                "source_type": "pdf",         
+                "page_number": None,             
+                "chunk_index": chunk_index,   
                 "word_count": current_word_count
             })
     
@@ -210,7 +221,7 @@ def chunk_text_by_sentece(
 
 def process_all_pdf(raw_dir: str = r"data/raw/pdf") -> list[dict]:
     """
-    process all pdf's in raw/pdf directories and returns chunks
+    Processes all PDFs page by page in raw/pdf directories, preserving page numbers in chunks.
     """
 
     pdf_files = [file for file in os.listdir(raw_dir) if file.endswith('.pdf')]
@@ -226,22 +237,39 @@ def process_all_pdf(raw_dir: str = r"data/raw/pdf") -> list[dict]:
         logger.info(f"Processing: {filename}")
 
         try:
-            text = extract_text_from_pdf(pdf_path)
+            pages = extract_pages_from_pdf(pdf_path)
 
-            if len(text.split()) < 100:
-                logger.error(
-                    f"skipping {filename} too little text extracted"
-                    f"({len(text.split())} words), Maybe scanned pdf"
-                )
+            if not pages:
+                logger.warning(f"No usable pages extracted from {filename}")
                 continue
 
-            chunks = chunk_text_by_sentece(
-                text = text,
-                source = filename,
-                target_chunk_words = 300,
-                overlap_sentences=2
+            file_chunks = []
+            chunk_index = 0
+
+            for page in pages:
+                # Chunk each page's text separately 
+                page_chunks = chunk_text_by_sentece(
+                    text=page["text"],
+                    source=filename,
+                    target_chunk_words=300,
+                    overlap_sentences=2
+                )
+
+                # Inject page number into each chunk from this page
+                for chunk in page_chunks:
+                    chunk["page_number"] = page["page_number"]
+                    chunk["chunk_index"] = chunk_index
+                    chunk["source_file"] = filename
+                    chunk["source_type"] = "pdf"
+                    chunk_index += 1
+
+                file_chunks.extend(page_chunks)
+
+            all_chunks.extend(file_chunks)
+            logger.info(
+                f"{filename}: {len(pages)} pages -> "
+                f"{len(file_chunks)} chunks"
             )
-            all_chunks.extend(chunks)
 
         except Exception as e:
             logger.error(f"Failed to process {filename} : {e}")
