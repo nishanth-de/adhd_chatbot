@@ -3,9 +3,6 @@
 A chatbot that helps users understand ADHD through trusted, 
 citation-backed answers grounded in verified clinical sources.
 
-**Live demo:** [your-app.vercel.app](https://your-app.vercel.app)  
-**API docs:** [your-api.railway.app/docs](https://your-api.railway.app/docs)
-
 ---
 
 ## Why This Exists
@@ -91,9 +88,9 @@ cp .env.example .env
 ```
 
 ### Environment Variables
-DATABASE_URL=postgresql://adhd_user:adhd_pass@localhost:5432/adhd_db
-GEMINI_API_KEY=your_gemini_api_key
-COHERE_API_KEY=your_cohere_api_key
+- DATABASE_URL=postgresql://adhd_user:adhd_pass@localhost:5432/adhd_db
+- GEMINI_API_KEY=your_gemini_api_key
+- COHERE_API_KEY=your_cohere_api_key
 
 Get your free API keys:
 - Gemini: [aistudio.google.com](https://aistudio.google.com)
@@ -178,9 +175,3 @@ Always consult a qualified healthcare professional for personal
 medical decisions.
 
 ---
-
-## Project Context
-
-Built as an independent intern project demonstrating production RAG 
-architecture on a real healthcare use case. Developed over 10 days 
-starting from zero knowledge of FastAPI, pgvector, and RAG.
