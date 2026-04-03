@@ -15,7 +15,7 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-CHAT_MODEL = "gemini-2.5-flash"
+CHAT_MODEL = "gemini-3.1-flash-lite-preview"
 
 def test_llm_collection() -> bool:
     """
@@ -75,13 +75,9 @@ def generate_answer(question:str, context_chunks: list[dict]) -> str:
 
     """
     if not context_chunks:
-        return(
-            """
-            I was not able to find the relevant information in my knowledge base.
-            To answer your question please consult a healthcare professional or 
-            visit chadd.org for reliable ADHD information
-            """
-        )
+        return("""
+        I was not able to find the relevant information in my knowledge base. To answer your question please consult a healthcare professional or visit chadd.org for reliable ADHD information.
+        """)
     
     # Using citation formatter for consistent context structure
     context_text = format_context_for_llm(context_chunks)
