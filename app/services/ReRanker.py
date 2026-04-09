@@ -21,6 +21,7 @@ HIGH_CONFIDENCE_THRESHOLD = 0.70
 MEDIUM_CONFIDENCE_THRESHOLD = 0.40
 
 
+
 def rerank_chunks(
     query: str,
     chunks: list[dict],
@@ -98,6 +99,8 @@ def rerank_chunks(
             chunk["confidence"] = "medium"
         return chunks[:top_n]   
 
+
+
 def classify_confidence(relevance_score: float) -> str:
     """
     Converts a numeric relevance score into a human-readable confidence level.
@@ -117,7 +120,9 @@ def classify_confidence(relevance_score: float) -> str:
         return "medium"
     else:
         return "low"
-    
+
+
+
 def get_overall_confidence(reranked_chunks: list[dict]) -> str:
     """
     Derives overall response confidence from the top reranked chunk.
@@ -134,6 +139,8 @@ def get_overall_confidence(reranked_chunks: list[dict]) -> str:
     if not reranked_chunks:
         return "out_of_scope"
     return reranked_chunks[0]["confidence"]
+
+
 
 if __name__ == "__main__":
 
