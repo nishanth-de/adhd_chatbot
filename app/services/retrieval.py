@@ -6,8 +6,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import logging
 from sqlalchemy import text
-from database import get_connection
-from services.embeddings import get_query_embedding
+from app.database import get_connection
+from app.services.embeddings import get_query_embedding
 
 logger = logging.getLogger(__name__)
 
