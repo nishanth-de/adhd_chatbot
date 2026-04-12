@@ -43,6 +43,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://adhd-chatbot-ui.vercel.app",
         "https://adhd-chatbot-production.up.railway.app",
         "http://localhost:3000", # local React development
         "http://127.0.0.1:5500", # local HTML file testing via Live Server
