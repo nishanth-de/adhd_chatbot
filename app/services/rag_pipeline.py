@@ -3,16 +3,19 @@ from app.services.retrieval import hybrid_search
 from app.services.reranker import rerank_chunks, get_overall_confidence
 from app.services.citations import build_citations
 from app.services.llm import generate_answer
+from app.services.gaurdrails import check_input, sanitise_response
 
 logger = logging.getLogger(__name__)
 
 def run_rag_pipeline(question: str) -> dict:
     """
-    Orchestrates the complete RAG pipeline:
+    Orchestrates the complete RAG pipeline with gaurdrails:
+    0. Pre-LLM gaurdrail check(crisis, out_of_scope, conversational)
     1. Hybrid search (vector + FTS + RRF)
     2. Cohere reranking
-    3. Answer generation
-    4. Citation building
+    3. LLM Answer generation
+    4. Post LLM answer sanitisation
+    5. Citation building
 
     This is the single function your chat endpoint calls.
     Returns a structured dict matching ChatResponse schema.
@@ -24,6 +27,26 @@ def run_rag_pipeline(question: str) -> dict:
         dict with: answer, confidence, sources, retrieved_count
     """
     logger.info(f"RAG pipeline start | question='{question[:80]}'")
+
+    # Stage 0: Gaurdrail check 
+    # Runs before any API calls - Fast, deterministic and no cost
+    gaurdrail_result = check_input(question)
+
+    if not gaurdrail_result["safe"]:
+        reason = gaurdrail_result["reason"]
+        logger.info(f"Gaurdrail Blocked request | reason = {reason}")
+
+        # Crisis gets a special confidence label
+        confidence = "crisis" if reason == "crisis_detected" else "conversation" if reason == "conversational" else "out_of_scope"
+
+        return{
+        "answer": gaurdrail_result["blocked_response"],
+        "confidence": confidence,
+        "sources": [],
+        "retrieved_count": 0
+        }
+
+
 
     # Stage 1: Hybrid retrieval
     hybrid_chunks = hybrid_search(question, top_n=5)
@@ -49,15 +72,20 @@ def run_rag_pipeline(question: str) -> dict:
     confidence = get_overall_confidence(reranked_chunks)
 
     # Stage 4: Answer generation
-    answer = generate_answer(question, reranked_chunks)
+    raw_answer = generate_answer(question, reranked_chunks)
 
-    # Stage 5: Build citations
+    # Stage 5: Post LLM-sanitisation
+    # Catches unsafe content that bypases system prompt
+    answer = sanitise_response(raw_answer)
+
+
+    # Stage 6: Build citations
     citations = build_citations(reranked_chunks)
 
     logger.info(
-        f"RAG pipeline complete | "
-        f"confidence={confidence} | "
-        f"sources={len(citations)}"
+        f"RAG pipeline complete | confidence={confidence} | "
+        f"sources={len(citations)} | "
+        f"sanitised={'yes' if answer != raw_answer else 'no'}"
     )
 
     return {

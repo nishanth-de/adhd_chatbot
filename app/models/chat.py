@@ -55,7 +55,8 @@ class ChatResponse(BaseModel):
     answer: str = Field(description="AI-generated answer grounded in sources")
     session_id: str = Field(description="Session ID for this conversation")
     confidence: str = Field(
-        description="Overall confidence: high, medium, low, or out_of_scope"
+        description="Overall confidence: high/medium/low/out_of_scope/crisis. "
+        "crisis means the message triggered safety protocols."
     )
     sources: list[SourceCitation] = Field(
         description="Source chunks used to generate this answer"
