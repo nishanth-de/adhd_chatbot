@@ -29,7 +29,14 @@ else:
         pool_size = 5,
         max_overflow = 10,
         pool_pre_ping = True,
-        echo = False # Need to learn!!
+        pool_recycle=300, # Recycle connections every 5 minutes.
+        connect_args={
+            "connect_timeout": 10, # Fail fast if DB is unreachable.
+            "keepalives": 1,
+            "keepalives_idle": 60,
+            "keepalives_interval": 10,
+            "keepalives_count": 5
+        }
     )
 
 def get_connection():

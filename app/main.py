@@ -1,12 +1,14 @@
 import logging
+import asyncio
+from contextlib import asynccontextmanager
+from sqlalchemy import text
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import chat
 from app.models.chat import HealthResponse
-from app.database import test_connection
+from app.database import get_connection,test_connection
 from app.services.embeddings import test_embedding_connection
-
 
 
 # Logging for the entire application
@@ -17,6 +19,34 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+async def keep_db_warm():
+    """
+    Ping the database for every 4 minutes to prevent neon cold starts.
+    Neon free tier will be paused after 5 minutes of inactivity.
+    This runs as a background task for the lifetime of the server.
+    """
+    while True:
+        try:
+            with get_connection() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("DB Keep-alive ping sent!")
+        except Exception as e:
+            logger.error(f"DB keep-alive failed {e}")
+        await asyncio.sleep(240) # 4 minutes
+
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Runs on startup and shutdown"""
+    # Start background keep-alive task
+    task = asyncio.create_task(keep_db_warm())
+    logger.info("Database keep-alive task started")
+    yield
+    # Shutdown - cancel the background task
+    task.cancel
+    logger.info("Database keep-alive task stopped")
+
 
 
 app = FastAPI(
@@ -25,15 +55,16 @@ app = FastAPI(
     """
     An AI-powered ADHD psychoeducation assistant.
     
-    Answers questions about ADHD symptoms, terminology, diagnosis, 
-    and coping strategies — grounded in verified documents.
+    Answers questions about ADHD symptoms, terminology and 
+    coping strategies — grounded in verified documents.
     
     Note: This system provides educational information only. 
     Always consult a healthcare professional for personal medical decisions
     """,
     version="0.1.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 
