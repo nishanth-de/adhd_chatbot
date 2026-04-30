@@ -90,6 +90,7 @@
         .confidence.low { background: #fed7d7; color: #742a2a; }
         .confidence.out_of_scope { background: #e2e8f0; color: #4a5568; }
         .confidence.crisis { background: #fed7d7; color: #742a2a; }
+        .confidence.conversational { background: #e9d8fd; color: #553c9a; }
 
         .sources {
             margin-top: 10px;
@@ -224,14 +225,11 @@
             sendBtn.disabled = true;
             input.value = "";
 
-            // Show user message
             appendMessage("user", question);
-
-            // Show typing indicator
             const typingEl = appendTyping();
 
             try {
-                const response = await fetch(`${API_BASE}/api/v1/chat`, {
+                const response = await fetch(`${API_BASE}/api/v1/chat/stream`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -240,19 +238,109 @@
                     })
                 });
 
-                const data = await response.json();
-                sessionId = data.session_id;
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
 
                 typingEl.remove();
-                appendBotMessage(data);
+
+                // Create bot message container — we'll fill it as tokens arrive
+                const botDiv = document.createElement("div");
+                botDiv.className = "message bot";
+                document.getElementById("messages").appendChild(botDiv);
+
+                let metadata = null;
+                let answerText = "";
+                let metadataProcessed = false;
+
+                // Read the stream chunk by chunk
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+
+                    // First chunk contains metadata
+                    if (!metadataProcessed && chunk.startsWith("METADATA:")) {
+                        const metaLine = chunk.split("\n")[0];
+                        const metaJson = metaLine.replace("METADATA:", "");
+                        try {
+                            metadata = JSON.parse(metaJson);
+                        } catch (e) {
+                            console.error("Failed to parse metadata:", e);
+                        }
+                        metadataProcessed = true;
+
+                        // Show confidence badge immediately
+                        const confidence = metadata?.confidence || "low";
+                        const confidenceLabel = {
+                            high: "High confidence",
+                            medium: "Medium confidence",
+                            low: "Low confidence",
+                            out_of_scope: "Outside scope",
+                            crisis: "Crisis support",
+                            conversational: "💬"
+                        }[confidence] || confidence;
+
+                        botDiv.innerHTML = `<span class="confidence ${confidence}">${confidenceLabel}</span><div class="answer-text"></div>`;
+
+                        // Handle text after the metadata line (same chunk)
+                        const remaining = chunk.substring(chunk.indexOf("\n") + 1);
+                        if (remaining) {
+                            answerText += remaining;
+                            botDiv.querySelector(".answer-text").textContent = answerText;
+                        }
+                    } else {
+                        // Regular text token — append to answer
+                        answerText += chunk;
+                        const answerEl = botDiv.querySelector(".answer-text");
+                        if (answerEl) {
+                            answerEl.textContent = answerText;
+                        } else {
+                            // Fallback if metadata wasn't received
+                            botDiv.textContent = answerText;
+                        }
+                    }
+
+                    // Keep scroll at bottom as text arrives
+                    const messages = document.getElementById("messages");
+                    messages.scrollTop = messages.scrollHeight;
+                }
+
+                // After streaming completes — add sources
+                if (metadata?.sources && metadata.sources.length > 0) {
+                    const sourcesHtml = buildSourcesHtml(metadata.sources);
+                    botDiv.innerHTML += sourcesHtml;
+                }
+
+                sessionId = response.headers.get("X-Session-Id") || sessionId;
 
             } catch (error) {
-                typingEl.remove();
+                typingEl?.remove();
+                console.error("Stream error:", error);
                 appendMessage("bot", "Sorry, I couldn't connect to the server. Please try again.");
             }
 
             sendBtn.disabled = false;
             input.focus();
+        }
+
+        function buildSourcesHtml(sources) {
+            let html = '<div class="sources"><strong>Sources:</strong>';
+            sources.forEach((src, i) => {
+                html += `
+                    <div class="source-item">
+                        <strong>[${i+1}] ${escapeHtml(src.source_file)}</strong>
+                        — page ${src.page_number}, chunk ${src.chunk_index}
+                        (relevance: ${src.relevance_score})<br>
+                        <em>${escapeHtml(src.excerpt)}</em>
+                    </div>`;
+            });
+            html += '</div>';
+            return html;
         }
 
         function appendMessage(role, text) {
@@ -276,7 +364,8 @@
                 medium: "Medium confidence",
                 low: "Low confidence",
                 out_of_scope: "Outside scope",
-                crisis: "Crisis support"
+                crisis: "Crisis support",
+                conversational: "💬"
             }[confidence] || confidence;
 
             let html = `<span class="confidence ${confidence}">${confidenceLabel}</span>`;

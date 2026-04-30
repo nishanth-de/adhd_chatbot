@@ -1,9 +1,10 @@
 import logging
 import time
+from typing import Generator
 from app.services.retrieval import hybrid_search
 from app.services.reranker import rerank_chunks, get_overall_confidence
 from app.services.citations import build_citations
-from app.services.llm import generate_answer
+from app.services.llm import generate_answer, generate_answer_stream
 from app.services.gaurdrails import check_input, sanitise_response
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,76 @@ def run_rag_pipeline(question: str) -> dict:
         "sources": citations,
         "retrieved_count": len(hybrid_chunks)
     }
+
+
+
+#                          run_rag_pipeline_stream
+
+def run_rag_pipeline_stream(question: str) -> Generator[str, None, None]:
+    """
+    Streaming version of rag_pipeline.
+
+    Run Retrieval synchronously (must complete before Generation starts), then Streams the
+    Gemini Generation text tokens as they are produced.
+
+    Yield:
+        str: Either a JSON metadata prefix or text tokens
+
+    Protocol:
+        First Yield: JSON strings with citations and confidence
+        Subsequent Yield: Answer(text token)
+        This lets the frontend to show sources immediately while answer streams in.
+    """
+    import json
+
+    # Stage 0: Gaurdrails(must complete anything else)
+    gaurdrail_result = check_input(question)
+
+    if not gaurdrail_result["safe"]:
+        # Non streaming response for blocked messages
+        # Yield as single chunk
+        yield gaurdrail_result["blocked_response"]
+        return
+    
+    # Stage 1: Retrieval(must complete before generation)
+    hybrid_chunks = hybrid_search(question, top_n=5)
+
+    if not hybrid_chunks:
+        yield(
+            "I don't have reliable information about that in my knowledge base. "
+            "For accurate ADHD information, please consult a healthcare professional "
+            "or visit CHADD.org."
+        )
+        return
+    
+    # Stage 2: Reranking(must complete before generation)
+    top_similarity = hybrid_chunks[0].get("similarity", 0)
+    if top_similarity >= 0.88:
+        reranked_chunks = hybrid_chunks[:3]
+        for chunk in reranked_chunks:
+            chunk["relevance_score"] = top_similarity
+            chunk["confidence"] = "high"
+    else:
+        reranked_chunks = rerank_chunks(question, hybrid_chunks, top_n=3)
+    
+    # Stage 3: Build citation (available before generation completes)
+    citations = build_citations(reranked_chunks)
+    confidence = get_overall_confidence(reranked_chunks)
+
+    # Yield metadata first as a JSON prefix
+    # Frontend parses this to show sources immediately
+    metadata = {
+        "type": "metadata",
+        "confidence": confidence,
+        "sources": citations
+    }
+    yield f"METADATA:{json.dumps(metadata)}\n"
+
+    # Stage 4 stream the answer
+    for token in generate_answer_stream(question, reranked_chunks):
+        santised = sanitise_response(token) if token else token
+        yield token
+
 
 
 if __name__ == "__main__":

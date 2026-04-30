@@ -1,9 +1,10 @@
 import uuid
 import logging
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from app.models.chat import ChatRequest, ChatResponse, SourceCitation
 from app.models.chat import FeedbackRequest, FeedbackResponse
-from app.services.rag_pipeline import run_rag_pipeline
+from app.services.rag_pipeline import run_rag_pipeline, run_rag_pipeline_stream
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,48 @@ async def chat_endpoint(request: ChatRequest):
             status_code=500,
             detail="An error occurred processing your question. Please try again."
         )
+
+
+@router.post(
+        "chat/stream",
+        summary = "Streaming chat endpoint",
+        description="""
+        Streams the answer token by token as Gemini generates it.
+        First chunk is a METADATA: prefix with sources and confidence.
+        Subsequent chunks are plain text tokens of the answer.
+
+        Use this endpoint for real-time chat UI experience.
+        Use POST /chat for complete JSON responses.
+        """
+)
+async def chat_stream_endpoint(request: ChatRequest):
+    """
+    Streaming chat — returns answer tokens as they're generated.
+    Frontend displays text progressively rather than waiting for completion.
+    """
+    session_id = request.session_id or str(uuid.uuid4())
     
+    logger.info(
+        f"Stream request | session={session_id} | "
+        f"question='{request.question[:60]}'"
+    )
+
+    def generate():
+        for token in run_rag_pipeline_stream(request.question):
+            yield token
+        
+    return StreamingResponse(
+        generate(),
+        media_type= "text/plain",
+        headers={
+            "X-Session-Id": session_id,
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"  # disables nginx buffering on Railway
+        }
+    )
+
+
+
 @router.post(
     "/feedback",
     response_model=FeedbackResponse,

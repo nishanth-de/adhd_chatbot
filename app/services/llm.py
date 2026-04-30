@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from app.services.citations import format_context_for_llm
+from typing import Generator
+
 
 load_dotenv()
 
@@ -114,6 +116,72 @@ def generate_answer(question:str, context_chunks: list[dict]) -> str:
     except Exception as e:
         logger.error(f"Answer generation failed - {e}")
         raise
+
+
+
+#                                Streaming_response!!
+def generate_answer_stream(
+    question: str,
+    context_chunks: list[dict]
+) -> Generator[str, None, None]:
+    """
+    Streaming version of generate_answer.
+    Yields text tokens as Gemini produces them.
+
+    We use this with FastAPI's StreamingResponse for real-time output.
+    User receives text tokens immediately rather than waiting for the complete response.
+
+    Arguments:
+        question: user's question.
+        context_chunks: Rerankend chunks from retrieval.
+    
+    Yields:
+        str: Individual text tokens from gemini.
+    """
+    if not context_chunks:
+        yield(
+            "I wasn't able to find reliable information about that. "
+            "Please consult a healthcare professional or visit CHADD.org."
+        )
+        return
+    
+    context_text = format_context_for_llm(context_chunks)
+
+    user_prompt = f"""Use the following verified information to answer the question.
+Only use what is provided below, do not add information from outside this context.
+
+===Context===
+{context_chunks}
+
+===Question===
+{question}
+
+Provide a clear and helpful answer based strictly on the context above."""
+    try:
+        """
+        generate_content_stream returns an iterator of chunks.
+        Each chunks contains a small piece of the response text.
+        """
+        response_stream = client.models.generate_content_stream(
+            model = CHAT_MODEL,
+            contents = user_prompt,
+            config = types.GenerateContentConfig(
+                system_instruction = SYSTEM_PROMPT,
+                temperature =0.2,
+                max_output_tokens = 800
+            )
+        )
+
+        for chunk in response_stream:
+            # Each chunk may contain some text, yield it immediately!
+            if chunk.text:
+                yield chunk.text
+
+    except Exception as e:
+        logger.warning(f"Streaming generation failed: {e}")
+        # Yield error message so the user can see it!
+        yield "\n\nI encountered an error generating a response. Please try again."
+
 
 if __name__ == "__main__":
     print("===LLM SERVICE TEST===\n")
