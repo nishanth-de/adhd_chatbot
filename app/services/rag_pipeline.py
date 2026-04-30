@@ -111,7 +111,7 @@ def run_rag_pipeline(question: str) -> dict:
 
 #                          run_rag_pipeline_stream
 
-def run_rag_pipeline_stream(question: str) -> Generator[str, None, None]:
+async def run_rag_pipeline_stream(question: str):
     """
     Streaming version of rag_pipeline.
 
@@ -137,7 +137,7 @@ def run_rag_pipeline_stream(question: str) -> Generator[str, None, None]:
         yield gaurdrail_result["blocked_response"]
         return
     
-    # Stage 1: Retrieval(must complete before generation)
+    # Stage 1: Retrieval(must complete before generation) - sync
     hybrid_chunks = hybrid_search(question, top_n=5)
 
     if not hybrid_chunks:
@@ -148,7 +148,7 @@ def run_rag_pipeline_stream(question: str) -> Generator[str, None, None]:
         )
         return
     
-    # Stage 2: Reranking(must complete before generation)
+    # Stage 2: Reranking(must complete before generation) - sync
     top_similarity = hybrid_chunks[0].get("similarity", 0)
     if top_similarity >= 0.88:
         reranked_chunks = hybrid_chunks[:3]
@@ -158,7 +158,7 @@ def run_rag_pipeline_stream(question: str) -> Generator[str, None, None]:
     else:
         reranked_chunks = rerank_chunks(question, hybrid_chunks, top_n=3)
     
-    # Stage 3: Build citation (available before generation completes)
+    # Stage 3: Build citation (available before generation completes) - sync
     citations = build_citations(reranked_chunks)
     confidence = get_overall_confidence(reranked_chunks)
 
@@ -171,9 +171,8 @@ def run_rag_pipeline_stream(question: str) -> Generator[str, None, None]:
     }
     yield f"METADATA:{json.dumps(metadata)}\n"
 
-    # Stage 4 stream the answer
-    for token in generate_answer_stream(question, reranked_chunks):
-        santised = sanitise_response(token) if token else token
+    # Stage 4 stream generation (True async, everything else is sync)
+    async for token in generate_answer_stream(question, reranked_chunks):
         yield token
 
 

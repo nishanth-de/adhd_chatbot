@@ -19,7 +19,7 @@ client = genai.Client(api_key=api_key)
 
 CHAT_MODEL = "gemini-3.1-flash-lite-preview"
 
-def test_llm_collection() -> bool:
+def test_llm_connection() -> bool:
     """
     Quick connectivity test for the Gemini API.
     only used by health checks.
@@ -120,13 +120,16 @@ def generate_answer(question:str, context_chunks: list[dict]) -> str:
 
 
 #                                Streaming_response!!
-def generate_answer_stream(
+async def generate_answer_stream(
     question: str,
     context_chunks: list[dict]
-) -> Generator[str, None, None]:
+):
     """
     Streaming version of generate_answer.
-    Yields text tokens as Gemini produces them.
+    Yields text tokens as Gemini produces them without blocking the event loop.
+
+    Why async?: synchronous generator blocks the event loop, preventing chunks from
+    being sent until generation completes.
 
     We use this with FastAPI's StreamingResponse for real-time output.
     User receives text tokens immediately rather than waiting for the complete response.
@@ -151,7 +154,7 @@ def generate_answer_stream(
 Only use what is provided below, do not add information from outside this context.
 
 ===Context===
-{context_chunks}
+{context_text}
 
 ===Question===
 {question}
@@ -176,6 +179,10 @@ Provide a clear and helpful answer based strictly on the context above."""
             # Each chunk may contain some text, yield it immediately!
             if chunk.text:
                 yield chunk.text
+                # CRITICAL: Yield contol to event loop after each token
+                # Without this, FastAPI Buffers everything before sending.
+                import asyncio
+                await asyncio.sleep(0)
 
     except Exception as e:
         logger.warning(f"Streaming generation failed: {e}")

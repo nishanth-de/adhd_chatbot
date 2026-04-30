@@ -1,9 +1,12 @@
 import uuid
 import logging
+import asyncio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from app.models.chat import ChatRequest, ChatResponse, SourceCitation
 from app.models.chat import FeedbackRequest, FeedbackResponse
+from app.database import get_connection
+from sqlalchemy import text
 from app.services.rag_pipeline import run_rag_pipeline, run_rag_pipeline_stream
 
 
@@ -63,7 +66,7 @@ async def chat_endpoint(request: ChatRequest):
 
 
 @router.post(
-        "chat/stream",
+        "/chat/stream",
         summary = "Streaming chat endpoint",
         description="""
         Streams the answer token by token as Gemini generates it.
@@ -86,17 +89,48 @@ async def chat_stream_endpoint(request: ChatRequest):
         f"question='{request.question[:60]}'"
     )
 
-    def generate():
-        for token in run_rag_pipeline_stream(request.question):
+    """    
+    async def generate():
+    
+        FastAPI runs async endpoints on the event loop.
+        A synchronous generat() will block the event loop until it finished,
+        Meaning all chunks accumulate before any are sent. 
+
+        loop = asyncio.get_event_loop()
+
+        # Run the synchronous generator in a thread pool,
+        # So it doesn't affect the event loop during DB/API calls.
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            # Collect all tokens from the sync generator
+            # We run this in a separate thread to avoid blocking
+            tokens = []
+
+            def collect_tokens():
+                for token in run_rag_pipeline_stream(request.question):
+                    tokens.append(token)
+
+            await loop.run_in_executor(pool, collect_tokens)
+
+        # Yield each token with a brief async pause between them
+        # This forces the event loop to flush after each chunk
+        for token in tokens:
             yield token
-        
+            await asyncio.sleep(0)
+    """
+
+    async def generate():
+        async for token in run_rag_pipeline_stream(request.question):
+            yield token
+
     return StreamingResponse(
         generate(),
         media_type= "text/plain",
         headers={
             "X-Session-Id": session_id,
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no"  # disables nginx buffering on Railway
+            "X-Accel-Buffering": "no", # disables nginx buffering on Railway 
         }
     )
 
@@ -165,8 +199,6 @@ async def get_demo_questions():
         }
     }
 
-from app.database import get_connection
-from sqlalchemy import text
 
 @router.get(
     "/stats",
