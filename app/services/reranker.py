@@ -95,7 +95,8 @@ def rerank_chunks(
         # This is a graceful degradation: system still works, just less precise
         logger.error(f"Reranking failed, using RRF order: {e}")
         for chunk in chunks[:top_n]:
-            chunk["relevance_score"] = 0.5  # neutral score
+            # Use actual similarity score as fallback, not hardcoded 0.5
+            chunk["relevance_score"] = round(chunk.get("similarity", 0.5), 4)
             chunk["confidence"] = "medium"
         return chunks[:top_n]   
 

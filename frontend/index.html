@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ADHD Psychoeducation Chatbot</title>
@@ -84,7 +85,30 @@
             margin-bottom: 8px;
             font-weight: 600;
         }
+        .answer-content p {
+            margin: 0 0 8px 0;
+            line-height: 1.6;
+        }
 
+        .answer-content ul, 
+        .answer-content ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .answer-content li {
+            margin-bottom: 4px;
+            line-height: 1.5;
+        }
+
+        .answer-content strong {
+            color: #2d3748;
+            font-weight: 600;
+        }
+
+        .answer-content p:last-child {
+            margin-bottom: 0;
+        }
         .confidence.high { background: #c6f6d5; color: #276749; }
         .confidence.medium { background: #fefcbf; color: #744210; }
         .confidence.low { background: #fed7d7; color: #742a2a; }
@@ -295,7 +319,7 @@
             }[confidence] || confidence;
 
             let html = `<span class="confidence ${confidence}">${confidenceLabel}</span>`;
-            html += `<div>${escapeHtml(data.answer)}</div>`;
+            html += `<div class="answer-content">${marked.parse(data.answer)}</div>`;
 
             if (data.sources && data.sources.length > 0) {
                 html += `<div class="sources"><strong>Sources:</strong>`;
