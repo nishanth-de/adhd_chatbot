@@ -75,7 +75,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://adhd-chatbot-ui.vercel.app", # vercel URL
-        "https://adhd-chatbot-4iyo.onrender.com/", # render URL
+        "https://adhd-chatbot-4iyo.onrender.com", # render URL
         "http://localhost:3000", # local React development
         "http://127.0.0.1:5500", # local HTML file testing via Live Server
         "http://localhost:5500",
